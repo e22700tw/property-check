@@ -199,7 +199,11 @@
     const records=state.records
       .filter(r=>state.filter==='全部'||r.status===state.filter)
       .slice()
-      .sort((a,b)=>(a.status==='待檢查'?0:1)-(b.status==='待檢查'?0:1));
+      .sort((a,b)=>{
+        const unitDiff=(a.custodyUnit||'').localeCompare(b.custodyUnit||'','zh-Hant');
+        if(unitDiff!==0)return unitDiff;
+        return (a.status==='待檢查'?0:1)-(b.status==='待檢查'?0:1);
+      });
     $('assetList').innerHTML=records.length?records.map(assetCard).join(''):'<div class="empty">沒有符合條件的財產資料</div>';
   }
   function assetCard(r){const cls=r.status==='正常'?'ok':r.status==='異常'?'bad':'wait';return `<article class="card asset-card"><span class="badge ${cls}">${esc(r.status)}</span><h3>${esc(r.assetName)}</h3><dl class="details"><dt>AssetNo</dt><dd>${esc(r.assetNo)} <button class="copy-btn" type="button" data-copy="${esc(r.assetNo)}">複製</button></dd><dt>保管單位</dt><dd>${esc(r.custodyUnit||'—')}</dd><dt>存置地點</dt><dd>${esc(r.location||'—')}</dd><dt>儀器類</dt><dd>${r.instrument?'是':'否'}</dd></dl><textarea class="comment" data-comment="${esc(r.assetNo)}" maxlength="200" placeholder="輸入意見（選填）">${esc(r.comment||'')}</textarea><div class="manual card-manual"><input class="control" data-manual-input value="${esc(r.assetNo)}" placeholder="輸入 AssetNo 比對"><button class="secondary" type="button" data-manual-check="${esc(r.assetNo)}">比對</button></div><button class="danger card-flag" type="button" data-flag-abnormal="${esc(r.assetNo)}">🚩 標記異常</button><div class="card-photo">${r.photoUrl?`<a href="${esc(r.photoUrl)}" target="_blank" rel="noopener"><img class="photo-thumb" src="${esc(r.photoUrl)}" alt="存證照片"></a>`:''}<div class="secondary capture-button card-photo-btn"><span>📷　${r.photoUrl?'更換照片存證':'附加照片存證'}</span><input type="file" accept="image/*" capture="environment" data-photo-input="${esc(r.assetNo)}" aria-label="附加照片存證"></div></div></article>`}
