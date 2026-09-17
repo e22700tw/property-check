@@ -111,7 +111,7 @@
 </div>
 
 <div id="instrumentDialog" class="dialog-wrap" role="alertdialog" aria-modal="true">
-  <div class="dialog"><div class="dialog-icon">▤</div><div class="eyebrow">儀器類財產</div><h2>需要加驗校正標籤</h2><p>此筆為儀器類財產，請加驗校正標籤。</p><button id="instrumentOk" class="primary" type="button">確定</button><div class="hint">按下確定後，回到相機繼續掃描</div></div>
+  <div class="dialog"><div class="dialog-icon">▤</div><div class="eyebrow">儀器類財產</div><h2>需要加驗校正標籤</h2><p>此筆為儀器類財產，請加驗校正標籤。</p><div class="hint">2 秒後自動回到相機繼續掃描</div></div>
 </div>
 <div id="toast" class="toast"></div>
 <div id="loading" class="loading"><div><div class="spinner"></div><div id="loadingText">載入中…</div></div></div>
@@ -167,7 +167,6 @@
     $('confirmAbnormal').addEventListener('click',()=>confirmAndNext('異常'));
     $('confirmNotfound').addEventListener('click',()=>confirmAndNext('異常'));
     $('batchModeToggle').addEventListener('change',e=>{state.batchMode=e.target.checked;updateBatchIndicator_()});
-    $('instrumentOk').addEventListener('click',()=>{$('instrumentDialog').classList.remove('open');resetScannerPanels();if(state.liveCameraUnavailable)setCameraStatus('請按「開啟相機拍攝並辨識」繼續掃描。');else startScanner()});
     $('filters').addEventListener('click',e=>{const b=e.target.closest('[data-filter]');if(!b)return;state.filter=b.dataset.filter;document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('active',x===b));renderRecords()});
     $('assetList').addEventListener('input',e=>{if(!e.target.matches('[data-comment]'))return;const rec=findRecord(e.target.dataset.comment);if(rec)rec.comment=e.target.value});
     $('assetList').addEventListener('change',e=>{const photoInput=e.target.closest('[data-photo-input]');if(!photoInput)return;const file=photoInput.files&&photoInput.files[0];if(file)uploadCardPhoto_(photoInput.dataset.photoInput,file)});
@@ -239,21 +238,21 @@
     else{state.current={assetNo:String(raw||''),assetName:'',status:'異常',instrument:false,comment:''};showNotFoundResult_(raw)}
   }
   async function quickSave_(rec){
-    const payload={date:state.session.date,inspector:state.session.inspector,assetNo:rec.assetNo,assetName:rec.assetName,status:'正常',comment:'',instrument:rec.instrument,custodyUnit:rec.custodyUnit||'',location:rec.location||''};
+    const payload={date:state.session.date,inspector:state.session.inspector,assetNo:rec.assetNo,assetName:rec.assetName,status:'正常',comment:'',instrument:rec.instrument,custodyUnit:rec.custodyUnit||'',location:rec.location||'',photoUrl:rec.photoUrl||''};
     try{
       await apiPost('save',payload);
       rec.status='正常';
       renderAll();
       toast('✓ 已記錄：'+rec.assetName);
     }catch(e){toast(e.message)}
-    if(rec.instrument){$('instrumentDialog').classList.add('open')}
+    if(rec.instrument){showInstrumentReminder_()}
     else{await restartScanner()}
   }
   async function confirmAndNext(forceStatus){
     if(!state.current)return;
     const rec=state.current,comment=$('resultComment').value.trim();
     const status=forceStatus||(rec.assetName?'正常':'異常');
-    const payload={date:state.session.date,inspector:state.session.inspector,assetNo:rec.assetNo,assetName:rec.assetName,status,comment,instrument:rec.instrument,custodyUnit:rec.custodyUnit||'',location:rec.location||''};
+    const payload={date:state.session.date,inspector:state.session.inspector,assetNo:rec.assetNo,assetName:rec.assetName,status,comment,instrument:rec.instrument,custodyUnit:rec.custodyUnit||'',location:rec.location||'',photoUrl:rec.photoUrl||''};
     setLoading(true,'正在儲存本筆結果…');
     try{
       const result=await apiPost('save',payload);
@@ -261,9 +260,18 @@
       else{state.records.push({...rec,status:'異常',comment,photoUrl:result.photoUrl||''})}
       renderAll();
       state.current=null;
-      if(payload.instrument){$('instrumentDialog').classList.add('open');$('scanResult').classList.remove('show')}
+      if(payload.instrument){$('scanResult').classList.remove('show');showInstrumentReminder_()}
       else{await restartScanner()}
     }catch(e){toast(e.message)}finally{setLoading(false)}
+  }
+  function showInstrumentReminder_(){
+    $('instrumentDialog').classList.add('open');
+    setTimeout(()=>{
+      $('instrumentDialog').classList.remove('open');
+      resetScannerPanels();
+      if(state.liveCameraUnavailable)setCameraStatus('請按「開啟相機拍攝並辨識」繼續掃描。');
+      else startScanner();
+    },2000);
   }
   function blobToBase64_(blob){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('讀取照片失敗'));reader.readAsDataURL(blob)})}
   async function uploadCardPhoto_(assetNo,file){
