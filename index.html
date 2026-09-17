@@ -24,7 +24,8 @@
     .file-label{display:flex;align-items:center;justify-content:center;text-align:center}.camera-input{position:absolute;width:1px;height:1px;opacity:.01;overflow:hidden}.live-scan{margin-bottom:10px}
     .overlay{height:100dvh;align-items:stretch;overflow:hidden}.scanner-shell{height:100dvh;min-height:0}.scanner-head{position:relative;flex:none;min-height:58px;display:flex;align-items:center;justify-content:center}.scanner-back{position:absolute;left:10px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#fff;padding:10px;font-weight:800;font-size:16px}.reader-wrap{flex:1 1 auto;min-height:210px;max-height:38dvh}.scanner-actions{flex:0 1 auto;max-height:55dvh;overflow-y:auto;-webkit-overflow-scrolling:touch}.reader-placeholder{position:absolute;z-index:2;display:flex;flex-direction:column;align-items:center;gap:12px;color:#d9e5eb;text-align:center;line-height:1.55}.reader-placeholder strong{font-size:38px}.capture-button{position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}.capture-button input{position:absolute;inset:0;width:100%;height:100%;opacity:0;z-index:5;cursor:pointer}.capture-button span{pointer-events:none}
     .batch-toggle{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--ink);background:var(--soft);border-radius:10px;padding:10px 12px;margin-bottom:10px}.batch-toggle input{width:18px;height:18px}
-    .card-photo{margin-top:8px}.card-photo-btn{min-height:40px;font-size:13px}.photo-thumb{width:100%;max-height:160px;object-fit:cover;border-radius:10px;display:block;margin-bottom:8px}
+    .comment-row{display:flex;gap:8px;align-items:stretch;margin-top:13px}.comment-row .comment{margin-top:0;flex:1}.card-save-comment{width:64px;min-height:72px;font-size:13px;padding:0}
+    .card-photo{margin-top:10px}.card-photo-btn{min-height:40px;font-size:13px}.photo-thumb{width:100%;max-height:160px;object-fit:cover;border-radius:10px;display:block;margin-bottom:6px}.photo-pending{font-size:12px;color:var(--warn);font-weight:700;margin-bottom:8px}
     .summary-grid{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center}.ring-wrap{position:relative;width:100px;height:100px;flex:none}.ring-label{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}.ring-label strong{font-size:22px;font-weight:800;line-height:1}.ring-label span{font-size:10px;color:var(--muted);margin-top:2px}.stat-list{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{background:var(--soft);border-radius:12px;padding:9px 11px}.stat strong{display:block;font-size:19px;font-weight:800}.stat span{font-size:11px;color:var(--muted)}.stat.bad strong{color:var(--bad)}
     .row-list{display:flex;flex-direction:column;gap:13px}.row-item{display:flex;flex-direction:column;gap:6px}.row-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px}.row-name{font-weight:700}.row-frac{color:var(--muted);white-space:nowrap;font-size:12px}.bar-track{height:8px;border-radius:99px;background:var(--soft);overflow:hidden}.bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--teal),var(--teal2))}
     .flag-item{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line)}.flag-item:first-child{border-top:0;padding-top:0}.flag-body{flex:1;min-width:0}.flag-name{font-weight:800;font-size:14px;margin:0 0 3px}.flag-meta{font-size:12px;color:var(--muted);line-height:1.6;word-break:break-word}.flag-meta b{color:var(--ink);font-weight:600}.flag-badge{flex:none;font-size:11px;font-weight:800;color:var(--bad);background:#fde8e8;padding:4px 9px;border-radius:99px;align-self:flex-start}.flag-photo-link{color:var(--teal);font-weight:700;font-size:12px}
@@ -169,14 +170,16 @@
     $('batchModeToggle').addEventListener('change',e=>{state.batchMode=e.target.checked;updateBatchIndicator_()});
     $('filters').addEventListener('click',e=>{const b=e.target.closest('[data-filter]');if(!b)return;state.filter=b.dataset.filter;document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('active',x===b));renderRecords()});
     $('assetList').addEventListener('input',e=>{if(!e.target.matches('[data-comment]'))return;const rec=findRecord(e.target.dataset.comment);if(rec)rec.comment=e.target.value});
-    $('assetList').addEventListener('change',e=>{const photoInput=e.target.closest('[data-photo-input]');if(!photoInput)return;const file=photoInput.files&&photoInput.files[0];if(file)uploadCardPhoto_(photoInput.dataset.photoInput,file)});
+    $('assetList').addEventListener('change',e=>{const photoInput=e.target.closest('[data-photo-input]');if(!photoInput)return;const file=photoInput.files&&photoInput.files[0];if(file)onCardPhotoChange_(photoInput.dataset.photoInput,file)});
     $('assetList').addEventListener('click',e=>{
       const copyBtn=e.target.closest('[data-copy]');
       if(copyBtn){copyAssetNo_(copyBtn.dataset.copy);return}
       const flagBtn=e.target.closest('[data-flag-abnormal]');
       if(flagBtn){markAbnormalFromCard_(flagBtn.dataset.flagAbnormal);return}
       const checkBtn=e.target.closest('[data-manual-check]');
-      if(checkBtn){const card=checkBtn.closest('.asset-card');const input=card&&card.querySelector('[data-manual-input]');manualCheckFromCard_(input?input.value:checkBtn.dataset.manualCheck)}
+      if(checkBtn){const card=checkBtn.closest('.asset-card');const input=card&&card.querySelector('[data-manual-input]');manualCheckFromCard_(input?input.value:checkBtn.dataset.manualCheck);return}
+      const saveBtn=e.target.closest('[data-save-comment]');
+      if(saveBtn){saveCardComment_(saveBtn.dataset.saveComment)}
     });
   }
   function fillPersonnel(names){$('inspector').innerHTML='<option value="">請選擇查核人員</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}
@@ -205,12 +208,55 @@
       });
     $('assetList').innerHTML=records.length?records.map(assetCard).join(''):'<div class="empty">沒有符合條件的財產資料</div>';
   }
-  function assetCard(r){const cls=r.status==='正常'?'ok':r.status==='異常'?'bad':'wait';return `<article class="card asset-card"><span class="badge ${cls}">${esc(r.status)}</span><h3>${esc(r.assetName)}</h3><dl class="details"><dt>AssetNo</dt><dd>${esc(r.assetNo)} <button class="copy-btn" type="button" data-copy="${esc(r.assetNo)}">複製</button></dd><dt>保管單位</dt><dd>${esc(r.custodyUnit||'—')}</dd><dt>存置地點</dt><dd>${esc(r.location||'—')}</dd><dt>儀器類</dt><dd>${r.instrument?'是':'否'}</dd></dl><textarea class="comment" data-comment="${esc(r.assetNo)}" maxlength="200" placeholder="輸入意見（選填）">${esc(r.comment||'')}</textarea><div class="manual card-manual"><input class="control" data-manual-input value="${esc(r.assetNo)}" placeholder="輸入 AssetNo 比對"><button class="secondary" type="button" data-manual-check="${esc(r.assetNo)}">比對</button></div><button class="danger card-flag" type="button" data-flag-abnormal="${esc(r.assetNo)}">🚩 標記異常</button><div class="card-photo">${r.photoUrl?`<a href="${esc(r.photoUrl)}" target="_blank" rel="noopener"><img class="photo-thumb" src="${esc(r.photoUrl)}" alt="存證照片"></a>`:''}<div class="secondary capture-button card-photo-btn"><span>📷　${r.photoUrl?'更換照片存證':'附加照片存證'}</span><input type="file" accept="image/*" capture="environment" data-photo-input="${esc(r.assetNo)}" aria-label="附加照片存證"></div></div></article>`}
+  function assetCard(r){const cls=r.status==='正常'?'ok':r.status==='異常'?'bad':'wait';const photoBlock=r.pendingPhoto?`<img class="photo-thumb" src="${esc(r.pendingPhoto.base64)}" alt="待上傳照片"><div class="photo-pending">📌 已選擇照片，按「🚩 標記異常」時會一併上傳</div>`:(r.photoUrl?`<a href="${esc(r.photoUrl)}" target="_blank" rel="noopener"><img class="photo-thumb" src="${esc(r.photoUrl)}" alt="存證照片"></a>`:'');return `<article class="card asset-card"><span class="badge ${cls}">${esc(r.status)}</span><h3>${esc(r.assetName)}</h3><dl class="details"><dt>AssetNo</dt><dd>${esc(r.assetNo)} <button class="copy-btn" type="button" data-copy="${esc(r.assetNo)}">複製</button></dd><dt>保管單位</dt><dd>${esc(r.custodyUnit||'—')}</dd><dt>存置地點</dt><dd>${esc(r.location||'—')}</dd><dt>儀器類</dt><dd>${r.instrument?'是':'否'}</dd></dl><div class="comment-row"><textarea class="comment" data-comment="${esc(r.assetNo)}" maxlength="200" placeholder="輸入意見（選填）">${esc(r.comment||'')}</textarea><button class="secondary card-save-comment" type="button" data-save-comment="${esc(r.assetNo)}">存檔</button></div><div class="card-photo">${photoBlock}<div class="secondary capture-button card-photo-btn"><span>📷　${r.pendingPhoto||r.photoUrl?'更換照片':'附加照片'}</span><input type="file" accept="image/*" capture="environment" data-photo-input="${esc(r.assetNo)}" aria-label="附加照片"></div></div><div class="manual card-manual"><input class="control" data-manual-input value="${esc(r.assetNo)}" placeholder="輸入 AssetNo 比對"><button class="secondary" type="button" data-manual-check="${esc(r.assetNo)}">比對</button></div><button class="danger card-flag" type="button" data-flag-abnormal="${esc(r.assetNo)}">🚩 標記異常</button></article>`}
   function openScanner(){if(!state.records.length)return toast('目前沒有可檢查的財產資料');$('scanOverlay').classList.add('open');resetScannerPanels();$('liveScan').hidden=true;$('readerPlaceholder').style.display='flex';state.liveCameraUnavailable=false;updateBatchIndicator_();setCameraStatus('正在開啟即時相機…');startScanner()}
   function updateBatchIndicator_(){$('scannerHeadLabel').textContent=state.batchMode?'掃描財產標籤（批次模式）':'掃描財產標籤'}
   async function copyAssetNo_(text){try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text)}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');document.body.removeChild(ta)}toast('已複製 '+text)}catch(e){toast('複製失敗，請手動選取')}}
-  async function manualCheckFromCard_(value){if(!value)return toast('請輸入 AssetNo');await stopScanner();$('scanOverlay').classList.add('open');resetScannerPanels();await handleCode(value)}
-  async function markAbnormalFromCard_(assetNo){const rec=findRecord(assetNo);if(!rec)return toast('找不到這筆資料');await stopScanner();$('scanOverlay').classList.add('open');resetScannerPanels();$('scanStartPanel').style.display='none';$('scanResult').classList.add('show');state.current=rec;showMatchedResult_(rec)}
+  async function manualCheckFromCard_(value){
+    if(!value)return toast('請輸入 AssetNo');
+    const code=normalizeAssetNo(value);
+    const rec=state.records.find(r=>normalizeAssetNo(r.assetNo)===code);
+    if(!rec)return toast('查無資料：'+value);
+    await saveCardResult_(rec,'正常',false);
+  }
+  async function markAbnormalFromCard_(assetNo){
+    const rec=findRecord(assetNo);
+    if(!rec)return toast('找不到這筆資料');
+    await saveCardResult_(rec,'異常',true);
+  }
+  async function saveCardComment_(assetNo){
+    const rec=findRecord(assetNo);
+    if(!rec)return;
+    const status=rec.status==='待檢查'?'正常':rec.status;
+    await saveCardResult_(rec,status,false);
+  }
+  async function saveCardResult_(rec,status,includePhoto){
+    setLoading(true,'正在儲存本筆結果…');
+    try{
+      const payload={date:state.session.date,inspector:state.session.inspector,assetNo:rec.assetNo,assetName:rec.assetName,status,comment:rec.comment||'',instrument:rec.instrument,custodyUnit:rec.custodyUnit||'',location:rec.location||'',photoUrl:rec.photoUrl||''};
+      if(includePhoto&&rec.pendingPhoto){payload.photoBase64=rec.pendingPhoto.base64;payload.photoMimeType=rec.pendingPhoto.mimeType}
+      const result=await apiPost('save',payload);
+      rec.status=status;
+      if(result.photoUrl)rec.photoUrl=result.photoUrl;
+      if(includePhoto)rec.pendingPhoto=null;
+      renderAll();
+      toast(status==='異常'?'🚩 已標記異常：'+rec.assetName:'✓ 已記錄：'+rec.assetName);
+      if(rec.instrument)showInstrumentReminderSimple_();
+    }catch(e){toast(e.message)}
+    finally{setLoading(false)}
+  }
+  function onCardPhotoChange_(assetNo,file){
+    const rec=findRecord(assetNo);
+    if(!rec||!file)return;
+    resizeImageFile_(file,1280).then(resized=>{
+      const blob=resized||file;
+      const reader=new FileReader();
+      reader.onload=()=>{rec.pendingPhoto={base64:reader.result,mimeType:blob.type||'image/jpeg'};renderAll();toast('已選擇照片，按「🚩 標記異常」時會一併上傳')};
+      reader.onerror=()=>toast('照片讀取失敗，請重新選擇');
+      reader.readAsDataURL(blob);
+    }).catch(()=>toast('照片處理失敗，請重新選擇'));
+  }
+  function showInstrumentReminderSimple_(){$('instrumentDialog').classList.add('open');setTimeout(()=>{$('instrumentDialog').classList.remove('open')},2000)}
   async function startScanner(){if(state.scanning)return;if(state.liveCameraUnavailable){setCameraStatus('此瀏覽器無法使用即時相機，請使用「開啟相機拍攝並辨識」。',true);return}try{if(!window.ZXing)throw new Error('掃描元件載入失敗，請檢查網路後重新整理。');if(!window.isSecureContext)throw new Error('相機只能在 HTTPS 安全網址使用。');if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('目前瀏覽器不支援即時相機。');setCameraStatus('正在要求相機權限…');$('reader').innerHTML='<video id="zxingVideo" playsinline muted style="width:100%;height:100%;object-fit:cover;display:block"></video>';const videoEl=document.getElementById('zxingVideo');state.zxingReader=new ZXing.BrowserMultiFormatReader(zxingHints_(false));state.scanning=true;$('readerPlaceholder').style.display='none';setCameraStatus('即時相機已開啟，請將 QR Code／條碼置於畫面中。');const constraints={video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false};await state.zxingReader.decodeFromConstraints(constraints,videoEl,(result,err)=>{if(result&&result.getText){const text=result.getText();if(looksLikeAssetCode_(text))handleCode(text)}})}catch(e){state.scanning=false;state.liveCameraUnavailable=true;$('readerPlaceholder').style.display='flex';const reason=cameraErrorMessage(e);setCameraStatus(reason+' 請使用「開啟相機拍攝並辨識」。',true);toast(reason);await stopScanner()}}
   async function stopScanner(){state.scanning=false;if(state.zxingReader){try{state.zxingReader.reset()}catch(e){}state.zxingReader=null}$('reader').innerHTML=''}
   function loadImageFromFile_(file){return new Promise((resolve,reject)=>{const img=new Image();const url=URL.createObjectURL(file);img.onload=()=>{URL.revokeObjectURL(url);resolve(img)};img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('圖片讀取失敗'))};img.src=url})}
@@ -272,25 +318,6 @@
       if(state.liveCameraUnavailable)setCameraStatus('請按「開啟相機拍攝並辨識」繼續掃描。');
       else startScanner();
     },2000);
-  }
-  function blobToBase64_(blob){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('讀取照片失敗'));reader.readAsDataURL(blob)})}
-  async function uploadCardPhoto_(assetNo,file){
-    const rec=findRecord(assetNo);
-    if(!rec||!file)return;
-    setLoading(true,'正在上傳照片…');
-    try{
-      const resized=await resizeImageFile_(file,1280);
-      const blob=resized||file;
-      const base64=await blobToBase64_(blob);
-      const status=rec.status==='待檢查'?'正常':rec.status;
-      const payload={date:state.session.date,inspector:state.session.inspector,assetNo:rec.assetNo,assetName:rec.assetName,status,comment:rec.comment||'',instrument:rec.instrument,custodyUnit:rec.custodyUnit||'',location:rec.location||'',photoBase64:base64,photoMimeType:blob.type||'image/jpeg'};
-      const result=await apiPost('save',payload);
-      rec.status=status;
-      rec.photoUrl=result.photoUrl||rec.photoUrl;
-      renderAll();
-      toast('照片已上傳');
-    }catch(e){toast(e.message)}
-    finally{setLoading(false)}
   }
   function resetScannerPanels(){$('scanStartPanel').style.display='block';$('scanResult').classList.remove('show','notfound');$('manualAssetNo').value='';$('readerPlaceholder').style.display='flex';state.current=null}
   async function restartScanner(){resetScannerPanels();await startScanner()}
