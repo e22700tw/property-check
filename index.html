@@ -47,6 +47,7 @@
         <div class="unit-grid" id="unitGrid"></div>
         <div class="hint">選填，最多選擇 4 層；留空時顯示全部財產。</div>
       </div>
+      <div class="field"><label for="locationFilter">存置地點 <span class="optional">（選填）</span></label><select id="locationFilter" class="control"><option value="">全部</option></select></div>
     </div>
     <button id="queryButton" class="primary" type="button">查詢檢查資料</button>
     <div class="source">資料來源：Google 試算表</div>
@@ -130,7 +131,7 @@
   function init(){
     if(!API_BASE_URL||API_BASE_URL.indexOf('PUT_YOUR_APPS_SCRIPT_EXEC_URL_HERE')>=0){showFatal(new Error('尚未設定 API_BASE_URL，請在 index.html 內填入 Apps Script 部署網址。'));return}
     bindEvents(); setLoading(true,'正在讀取查核人員與財產資料…');
-    apiGet('bootstrap').then(data=>{state.bootstrap=data;$('checkDate').value=data.today;$('dashDate').value=data.today;fillPersonnel(data.personnel);buildUnits(data.unitOptions);setLoading(false)}).catch(showFatal);
+    apiGet('bootstrap').then(data=>{state.bootstrap=data;$('checkDate').value=data.today;$('dashDate').value=data.today;fillPersonnel(data.personnel);buildUnits(data.unitOptions);fillLocations(data.locationOptions);setLoading(false)}).catch(showFatal);
   }
   async function apiGet(action,params){
     const usp=new URLSearchParams(Object.assign({action:action},params||{}));
@@ -183,10 +184,11 @@
     });
   }
   function fillPersonnel(names){$('inspector').innerHTML='<option value="">請選擇查核人員</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}
+  function fillLocations(locations){$('locationFilter').innerHTML='<option value="">全部</option>'+(locations||[]).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}
   function buildUnits(options){$('unitGrid').innerHTML=[0,1,2,3].map(i=>`<div class="unit-label">第 ${i+1} 層</div><select id="unit${i}" class="control"><option value="">全部</option>${(options[i]||[]).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>`).join('');for(let i=0;i<4;i++)$('unit'+i).addEventListener('change',()=>cascadeUnits(i))}
   function cascadeUnits(level){if(!state.bootstrap)return;const chosen=[0,1,2,3].map(i=>$('unit'+i).value);for(let next=level+1;next<4;next++){const current=$('unit'+next).value;const candidates=unitCandidates(next,chosen);$('unit'+next).innerHTML='<option value="">全部</option>'+candidates.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');$('unit'+next).value=candidates.includes(current)?current:'';chosen[next]=$('unit'+next).value}}
   function unitCandidates(level,chosen){const raw=state.bootstrap.unitOptions[level]||[];return raw}
-  async function queryRecords(){const date=$('checkDate').value,inspector=$('inspector').value,units=[0,1,2,3].map(i=>$('unit'+i).value);if(!date)return toast('請選擇查核日期');if(!inspector)return toast('請選擇查核人員');setLoading(true,'正在查詢財產資料…');try{state.session=await apiGet('query',{date,inspector,units:units.join(',')});state.records=state.session.records||[];state.filter='全部';document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('active',x.dataset.filter==='全部'));showScreen('list');renderAll()}catch(e){toast(e.message)}finally{setLoading(false)}}
+  async function queryRecords(){const date=$('checkDate').value,inspector=$('inspector').value,units=[0,1,2,3].map(i=>$('unit'+i).value),location=$('locationFilter').value;if(!date)return toast('請選擇查核日期');if(!inspector)return toast('請選擇查核人員');setLoading(true,'正在查詢財產資料…');try{state.session=await apiGet('query',{date,inspector,units:units.join(','),location});state.records=state.session.records||[];state.filter='全部';document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('active',x.dataset.filter==='全部'));showScreen('list');renderAll()}catch(e){toast(e.message)}finally{setLoading(false)}}
   function showScreen(name){
     ['search','list','dashboard'].forEach(n=>$(n+'Screen').classList.toggle('active',n===name));
     $('navSearch').classList.toggle('active',name==='search');
@@ -202,9 +204,9 @@
       .filter(r=>state.filter==='全部'||r.status===state.filter)
       .slice()
       .sort((a,b)=>{
-        const unitDiff=(a.custodyUnit||'').localeCompare(b.custodyUnit||'','zh-Hant');
-        if(unitDiff!==0)return unitDiff;
-        return (a.status==='待檢查'?0:1)-(b.status==='待檢查'?0:1);
+        const statusDiff=(a.status==='待檢查'?0:1)-(b.status==='待檢查'?0:1);
+        if(statusDiff!==0)return statusDiff;
+        return (a.custodyUnit||'').localeCompare(b.custodyUnit||'','zh-Hant');
       });
     $('assetList').innerHTML=records.length?records.map(assetCard).join(''):'<div class="empty">沒有符合條件的財產資料</div>';
   }
