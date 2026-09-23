@@ -122,7 +122,7 @@
   // ★★★ 請把下面換成你 Apps Script「部署 > 網頁應用程式」取得的 .../exec 網址 ★★★
   const API_BASE_URL = 'https://script.google.com/macros/s/AKfycby0M8sM74M40s0W7acIkh6A70_hoA0l0H63ZLI31bydAAnC3CsWmvwG7wJMx-jkvbL2/exec';
 
-  const state={bootstrap:null,session:null,records:[],filter:'全部',scanning:false,current:null,liveCameraUnavailable:false,zxingReader:null,batchMode:false,batchBusy:false,filterOptions:{unitOptions:[[],[],[],[]],locationOptions:[]}};
+  const state={bootstrap:null,session:null,records:[],filter:'全部',scanning:false,current:null,liveCameraUnavailable:false,zxingReader:null,batchMode:false,batchBusy:false,filterOptions:{unitOptions:[[],[],[],[]],unitPaths:[],locationOptions:[]}};
   function zxingHints_(tryHarder){const hints=new Map();hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.QR_CODE,ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.CODE_39,ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]);if(tryHarder)hints.set(ZXing.DecodeHintType.TRY_HARDER,true);return hints}
   function looksLikeAssetCode_(text){return /^[0-9][0-9-]{6,}$/.test(String(text||'').trim())}
   const $=id=>document.getElementById(id);
@@ -189,18 +189,23 @@
   function fillLocations(locations){$('locationFilter').innerHTML='<option value="">全部</option>'+(locations||[]).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}
   function buildUnits(options){$('unitGrid').innerHTML=[0,1,2,3].map(i=>`<div class="unit-label">第 ${i+1} 層</div><select id="unit${i}" class="control"><option value="">全部</option>${(options[i]||[]).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>`).join('');for(let i=0;i<4;i++)$('unit'+i).addEventListener('change',()=>cascadeUnits(i))}
   function cascadeUnits(level){const chosen=[0,1,2,3].map(i=>$('unit'+i).value);for(let next=level+1;next<4;next++){const current=$('unit'+next).value;const candidates=unitCandidates(next,chosen);$('unit'+next).innerHTML='<option value="">全部</option>'+candidates.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');$('unit'+next).value=candidates.includes(current)?current:'';chosen[next]=$('unit'+next).value}}
-  function unitCandidates(level,chosen){return state.filterOptions.unitOptions[level]||[]}
+  function unitCandidates(level,chosen){
+    if(level===0)return state.filterOptions.unitOptions[0]||[];
+    const paths=state.filterOptions.unitPaths||[];
+    const filtered=paths.filter(p=>{for(let i=0;i<level;i++){if(chosen[i]&&p[i]!==chosen[i])return false}return true});
+    return Array.from(new Set(filtered.map(p=>p[level]||'').filter(Boolean)));
+  }
   async function refreshFilterOptions_(){
     const date=$('checkDate').value,inspector=$('inspector').value;
     if(!date||!inspector){
-      state.filterOptions={unitOptions:[[],[],[],[]],locationOptions:[]};
+      state.filterOptions={unitOptions:[[],[],[],[]],unitPaths:[],locationOptions:[]};
       buildUnits(state.filterOptions.unitOptions);
       fillLocations(state.filterOptions.locationOptions);
       return;
     }
     try{
       const opts=await apiGet('filterOptions',{date,inspector});
-      state.filterOptions={unitOptions:opts.unitOptions||[[],[],[],[]],locationOptions:opts.locationOptions||[]};
+      state.filterOptions={unitOptions:opts.unitOptions||[[],[],[],[]],unitPaths:opts.unitPaths||[],locationOptions:opts.locationOptions||[]};
       buildUnits(state.filterOptions.unitOptions);
       fillLocations(state.filterOptions.locationOptions);
     }catch(e){toast(e.message)}
