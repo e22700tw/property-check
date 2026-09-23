@@ -122,7 +122,7 @@
   // ★★★ 請把下面換成你 Apps Script「部署 > 網頁應用程式」取得的 .../exec 網址 ★★★
   const API_BASE_URL = 'https://script.google.com/macros/s/AKfycby0M8sM74M40s0W7acIkh6A70_hoA0l0H63ZLI31bydAAnC3CsWmvwG7wJMx-jkvbL2/exec';
 
-  const state={bootstrap:null,session:null,records:[],filter:'全部',scanning:false,current:null,liveCameraUnavailable:false,zxingReader:null,batchMode:false};
+  const state={bootstrap:null,session:null,records:[],filter:'全部',scanning:false,current:null,liveCameraUnavailable:false,zxingReader:null,batchMode:false,batchBusy:false,batchLastMiss:null};
   function zxingHints_(tryHarder){const hints=new Map();hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.QR_CODE,ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.CODE_39,ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]);if(tryHarder)hints.set(ZXing.DecodeHintType.TRY_HARDER,true);return hints}
   function looksLikeAssetCode_(text){return /^[0-9][0-9-]{6,}$/.test(String(text||'').trim())}
   const $=id=>document.getElementById(id);
@@ -168,7 +168,7 @@
     $('confirmOk').addEventListener('click',()=>confirmAndNext('正常'));
     $('confirmAbnormal').addEventListener('click',()=>confirmAndNext('異常'));
     $('confirmNotfound').addEventListener('click',()=>confirmAndNext('異常'));
-    $('batchModeToggle').addEventListener('change',e=>{state.batchMode=e.target.checked;updateBatchIndicator_()});
+    $('batchModeToggle').addEventListener('change',e=>{state.batchMode=e.target.checked;state.batchBusy=false;state.batchLastMiss=null;updateBatchIndicator_()});
     $('filters').addEventListener('click',e=>{const b=e.target.closest('[data-filter]');if(!b)return;state.filter=b.dataset.filter;document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('active',x===b));renderRecords()});
     $('assetList').addEventListener('input',e=>{if(!e.target.matches('[data-comment]'))return;const rec=findRecord(e.target.dataset.comment);if(rec)rec.comment=e.target.value});
     $('assetList').addEventListener('change',e=>{const photoInput=e.target.closest('[data-photo-input]');if(!photoInput)return;const file=photoInput.files&&photoInput.files[0];if(file)onCardPhotoChange_(photoInput.dataset.photoInput,file)});
@@ -211,7 +211,7 @@
     $('assetList').innerHTML=records.length?records.map(assetCard).join(''):'<div class="empty">沒有符合條件的財產資料</div>';
   }
   function assetCard(r){const cls=r.status==='正常'?'ok':r.status==='異常'?'bad':'wait';const photoBlock=r.pendingPhoto?`<img class="photo-thumb" src="${esc(r.pendingPhoto.base64)}" alt="待上傳照片"><div class="photo-pending">📌 已選擇照片，按「🚩 標記異常」時會一併上傳</div>`:(r.photoUrl?`<a href="${esc(r.photoUrl)}" target="_blank" rel="noopener"><img class="photo-thumb" src="${esc(r.photoUrl)}" alt="存證照片"></a>`:'');return `<article class="card asset-card"><span class="badge ${cls}">${esc(r.status)}</span><h3>${esc(r.assetName)}</h3><dl class="details"><dt>AssetNo</dt><dd>${esc(r.assetNo)} <button class="copy-btn" type="button" data-copy="${esc(r.assetNo)}">複製</button></dd><dt>保管單位</dt><dd>${esc(r.custodyUnit||'—')}</dd><dt>存置地點</dt><dd>${esc(r.location||'—')}</dd><dt>儀器類</dt><dd>${r.instrument?'是':'否'}</dd></dl><div class="comment-row"><textarea class="comment" data-comment="${esc(r.assetNo)}" maxlength="200" placeholder="輸入意見（選填）">${esc(r.comment||'')}</textarea><button class="secondary card-save-comment" type="button" data-save-comment="${esc(r.assetNo)}">存檔</button></div><div class="card-photo">${photoBlock}<div class="secondary capture-button card-photo-btn"><span>📷　${r.pendingPhoto||r.photoUrl?'更換照片':'附加照片'}</span><input type="file" accept="image/*" capture="environment" data-photo-input="${esc(r.assetNo)}" aria-label="附加照片"></div></div><div class="manual card-manual"><input class="control" data-manual-input value="${esc(r.assetNo)}" placeholder="輸入 AssetNo 比對"><button class="secondary" type="button" data-manual-check="${esc(r.assetNo)}">比對</button></div><button class="danger card-flag" type="button" data-flag-abnormal="${esc(r.assetNo)}">🚩 標記異常</button></article>`}
-  function openScanner(){if(!state.records.length)return toast('目前沒有可檢查的財產資料');$('scanOverlay').classList.add('open');resetScannerPanels();$('liveScan').hidden=true;$('readerPlaceholder').style.display='flex';state.liveCameraUnavailable=false;updateBatchIndicator_();setCameraStatus('正在開啟即時相機…');startScanner()}
+  function openScanner(){if(!state.records.length)return toast('目前沒有可檢查的財產資料');$('scanOverlay').classList.add('open');resetScannerPanels();$('liveScan').hidden=true;$('readerPlaceholder').style.display='flex';state.liveCameraUnavailable=false;state.batchBusy=false;state.batchLastMiss=null;updateBatchIndicator_();setCameraStatus('正在開啟即時相機…');startScanner()}
   function updateBatchIndicator_(){$('scannerHeadLabel').textContent=state.batchMode?'掃描財產標籤（批次模式）':'掃描財產標籤'}
   async function copyAssetNo_(text){try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text)}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');document.body.removeChild(ta)}toast('已複製 '+text)}catch(e){toast('複製失敗，請手動選取')}}
   async function manualCheckFromCard_(value){
@@ -274,12 +274,20 @@
     const code=normalizeAssetNo(extractCode(raw));
     if(!code)return toast('無法辨識標籤內容');
     const rec=state.records.find(r=>normalizeAssetNo(r.assetNo)===code);
-    await stopScanner();
     if(state.batchMode){
-      if(rec){await quickSave_(rec)}
-      else{toast('查無資料：'+String(raw||''));await restartScanner()}
+      // 批次模式下相機全程不關閉、不重開，避免每筆之間出現黑畫面；改用短暫冷卻時間防止同一標籤被重複記錄。
+      if(state.batchBusy)return;
+      if(!rec){
+        if(state.batchLastMiss!==code){state.batchLastMiss=code;toast('查無資料：'+String(raw||''))}
+        return;
+      }
+      state.batchBusy=true;
+      state.batchLastMiss=null;
+      await quickSave_(rec);
+      setTimeout(()=>{state.batchBusy=false},1200);
       return;
     }
+    await stopScanner();
     $('scanStartPanel').style.display='none';
     $('scanResult').classList.add('show');
     if(rec){state.current=rec;showMatchedResult_(rec)}
@@ -293,8 +301,7 @@
       renderAll();
       toast('✓ 已記錄：'+rec.assetName);
     }catch(e){toast(e.message)}
-    if(rec.instrument){showInstrumentReminder_()}
-    else{await restartScanner()}
+    if(rec.instrument)showInstrumentReminderSimple_();
   }
   async function confirmAndNext(forceStatus){
     if(!state.current)return;
