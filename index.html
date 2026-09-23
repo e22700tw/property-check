@@ -45,7 +45,7 @@
       <div class="field">
         <label>保管單位 <span class="optional">（選填）</span></label>
         <div class="unit-grid" id="unitGrid"></div>
-        <div class="hint">選填，最多選擇 4 層；留空時顯示全部財產。</div>
+        <div class="hint">選填，最多選擇 4 層；留空時顯示全部財產。選單內容會依「查核日期」與「查核人員」自動更新。</div>
       </div>
       <div class="field"><label for="locationFilter">存置地點 <span class="optional">（選填）</span></label><select id="locationFilter" class="control"><option value="">全部</option></select></div>
     </div>
@@ -122,7 +122,7 @@
   // ★★★ 請把下面換成你 Apps Script「部署 > 網頁應用程式」取得的 .../exec 網址 ★★★
   const API_BASE_URL = 'https://script.google.com/macros/s/AKfycby0M8sM74M40s0W7acIkh6A70_hoA0l0H63ZLI31bydAAnC3CsWmvwG7wJMx-jkvbL2/exec';
 
-  const state={bootstrap:null,session:null,records:[],filter:'全部',scanning:false,current:null,liveCameraUnavailable:false,zxingReader:null,batchMode:false,batchBusy:false};
+  const state={bootstrap:null,session:null,records:[],filter:'全部',scanning:false,current:null,liveCameraUnavailable:false,zxingReader:null,batchMode:false,batchBusy:false,filterOptions:{unitOptions:[[],[],[],[]],locationOptions:[]}};
   function zxingHints_(tryHarder){const hints=new Map();hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.QR_CODE,ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.CODE_39,ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]);if(tryHarder)hints.set(ZXing.DecodeHintType.TRY_HARDER,true);return hints}
   function looksLikeAssetCode_(text){return /^[0-9][0-9-]{6,}$/.test(String(text||'').trim())}
   const $=id=>document.getElementById(id);
@@ -131,7 +131,7 @@
   function init(){
     if(!API_BASE_URL||API_BASE_URL.indexOf('PUT_YOUR_APPS_SCRIPT_EXEC_URL_HERE')>=0){showFatal(new Error('尚未設定 API_BASE_URL，請在 index.html 內填入 Apps Script 部署網址。'));return}
     bindEvents(); setLoading(true,'正在讀取查核人員與財產資料…');
-    apiGet('bootstrap').then(data=>{state.bootstrap=data;$('checkDate').value=data.today;$('dashDate').value=data.today;fillPersonnel(data.personnel);buildUnits(data.unitOptions);fillLocations(data.locationOptions);setLoading(false)}).catch(showFatal);
+    apiGet('bootstrap').then(data=>{state.bootstrap=data;$('checkDate').value=data.today;$('dashDate').value=data.today;fillPersonnel(data.personnel);buildUnits(state.filterOptions.unitOptions);fillLocations(state.filterOptions.locationOptions);refreshFilterOptions_();setLoading(false)}).catch(showFatal);
   }
   async function apiGet(action,params){
     const usp=new URLSearchParams(Object.assign({action:action},params||{}));
@@ -154,6 +154,8 @@
   }
   function bindEvents(){
     $('queryButton').addEventListener('click',queryRecords);
+    $('checkDate').addEventListener('change',refreshFilterOptions_);
+    $('inspector').addEventListener('change',refreshFilterOptions_);
     $('navSearch').addEventListener('click',()=>showScreen('search'));
     $('navList').addEventListener('click',()=>showScreen('list'));
     $('navDashboard').addEventListener('click',()=>showScreen('dashboard'));
@@ -186,8 +188,23 @@
   function fillPersonnel(names){$('inspector').innerHTML='<option value="">請選擇查核人員</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}
   function fillLocations(locations){$('locationFilter').innerHTML='<option value="">全部</option>'+(locations||[]).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}
   function buildUnits(options){$('unitGrid').innerHTML=[0,1,2,3].map(i=>`<div class="unit-label">第 ${i+1} 層</div><select id="unit${i}" class="control"><option value="">全部</option>${(options[i]||[]).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('')}</select>`).join('');for(let i=0;i<4;i++)$('unit'+i).addEventListener('change',()=>cascadeUnits(i))}
-  function cascadeUnits(level){if(!state.bootstrap)return;const chosen=[0,1,2,3].map(i=>$('unit'+i).value);for(let next=level+1;next<4;next++){const current=$('unit'+next).value;const candidates=unitCandidates(next,chosen);$('unit'+next).innerHTML='<option value="">全部</option>'+candidates.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');$('unit'+next).value=candidates.includes(current)?current:'';chosen[next]=$('unit'+next).value}}
-  function unitCandidates(level,chosen){const raw=state.bootstrap.unitOptions[level]||[];return raw}
+  function cascadeUnits(level){const chosen=[0,1,2,3].map(i=>$('unit'+i).value);for(let next=level+1;next<4;next++){const current=$('unit'+next).value;const candidates=unitCandidates(next,chosen);$('unit'+next).innerHTML='<option value="">全部</option>'+candidates.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');$('unit'+next).value=candidates.includes(current)?current:'';chosen[next]=$('unit'+next).value}}
+  function unitCandidates(level,chosen){return state.filterOptions.unitOptions[level]||[]}
+  async function refreshFilterOptions_(){
+    const date=$('checkDate').value,inspector=$('inspector').value;
+    if(!date||!inspector){
+      state.filterOptions={unitOptions:[[],[],[],[]],locationOptions:[]};
+      buildUnits(state.filterOptions.unitOptions);
+      fillLocations(state.filterOptions.locationOptions);
+      return;
+    }
+    try{
+      const opts=await apiGet('filterOptions',{date,inspector});
+      state.filterOptions={unitOptions:opts.unitOptions||[[],[],[],[]],locationOptions:opts.locationOptions||[]};
+      buildUnits(state.filterOptions.unitOptions);
+      fillLocations(state.filterOptions.locationOptions);
+    }catch(e){toast(e.message)}
+  }
   async function queryRecords(){const date=$('checkDate').value,inspector=$('inspector').value,units=[0,1,2,3].map(i=>$('unit'+i).value),location=$('locationFilter').value;if(!date)return toast('請選擇查核日期');if(!inspector)return toast('請選擇查核人員');setLoading(true,'正在查詢財產資料…');try{state.session=await apiGet('query',{date,inspector,units:units.join(','),location});state.records=state.session.records||[];state.filter='全部';document.querySelectorAll('.chip').forEach(x=>x.classList.toggle('active',x.dataset.filter==='全部'));showScreen('list');renderAll()}catch(e){toast(e.message)}finally{setLoading(false)}}
   function showScreen(name){
     ['search','list','dashboard'].forEach(n=>$(n+'Screen').classList.toggle('active',n===name));
