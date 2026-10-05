@@ -262,37 +262,43 @@
     if(name==='dashboard'&&$('dashDate').value&&!$('dashboardContent').innerHTML)queryDashboard();
   }
   function renderAll(){$('sessionLabel').textContent=`${state.session.date}｜${state.session.inspector}`;renderCounts();renderRecords();updateNextTargetHint_()}
+  function unitFilteredRecords_(){
+    return state.records.filter(r=>{if(!state.unitJumpFilter)return true;const levels=r.custodyLevels||[];return state.unitJumpFilter.every((v,i)=>levels[i]===v)});
+  }
+  function compareRecords_(a,b){
+    const statusDiff=(a.status==='待檢查'?0:1)-(b.status==='待檢查'?0:1);
+    if(statusDiff!==0)return statusDiff;
+    return (a.custodyUnit||'').localeCompare(b.custodyUnit||'','zh-Hant');
+  }
   function updateNextTargetHint_(){
     const el=$('nextTargetHint');
     if(!el)return;
-    const next=(state.records||[]).find(r=>r.status==='待檢查');
+    const next=unitFilteredRecords_().filter(r=>r.status==='待檢查').sort(compareRecords_)[0];
     if(next){el.innerHTML='下一筆：<strong>'+esc(next.assetName)+'</strong>　'+esc(next.custodyUnit||'')}
-    else{el.innerHTML='🎉 全部查核完成'}
+    else{el.innerHTML=state.unitJumpFilter?'🎉 此保管單位範圍已全部查核完成':'🎉 全部查核完成'}
   }
-  function renderCounts(){const total=state.records.length,checked=state.records.filter(r=>r.status!=='待檢查').length;$('totalCount').textContent=total;$('checkedCount').textContent=checked;$('remainingCount').textContent=total-checked;$('progressBar').style.width=(total?checked/total*100:0)+'%'}
+  function renderCounts(){const scoped=unitFilteredRecords_(),total=scoped.length,checked=scoped.filter(r=>r.status!=='待檢查').length;$('totalCount').textContent=total;$('checkedCount').textContent=checked;$('remainingCount').textContent=total-checked;$('progressBar').style.width=(total?checked/total*100:0)+'%'}
   function renderRecords(){
-    const records=state.records
+    const records=unitFilteredRecords_()
       .filter(r=>state.filter==='全部'||r.status===state.filter)
-      .filter(r=>{if(!state.unitJumpFilter)return true;const levels=r.custodyLevels||[];return state.unitJumpFilter.every((v,i)=>levels[i]===v)})
-      .slice()
-      .sort((a,b)=>{
-        const statusDiff=(a.status==='待檢查'?0:1)-(b.status==='待檢查'?0:1);
-        if(statusDiff!==0)return statusDiff;
-        return (a.custodyUnit||'').localeCompare(b.custodyUnit||'','zh-Hant');
-      });
+      .sort(compareRecords_);
     $('assetList').innerHTML=records.length?records.map(assetCard).join(''):'<div class="empty">沒有符合條件的財產資料</div>';
   }
   function jumpToUnit_(levels){
     state.unitJumpFilter=levels;
     $('unitJumpLabel').textContent='保管單位：'+levels.join('');
     $('unitJumpBanner').hidden=false;
+    renderCounts();
     renderRecords();
+    updateNextTargetHint_();
     $('unitJumpBanner').scrollIntoView({behavior:'smooth',block:'start'});
   }
   function clearUnitJump_(){
     state.unitJumpFilter=null;
     $('unitJumpBanner').hidden=true;
+    renderCounts();
     renderRecords();
+    updateNextTargetHint_();
   }
   function unitJumpChips_(r){
     const levels=(r.custodyLevels||[]).filter(Boolean);
