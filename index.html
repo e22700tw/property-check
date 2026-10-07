@@ -30,6 +30,9 @@
     .row-list{display:flex;flex-direction:column;gap:13px}.row-item{display:flex;flex-direction:column;gap:6px}.row-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px}.row-name{font-weight:700}.row-frac{color:var(--muted);white-space:nowrap;font-size:12px}.bar-track{height:8px;border-radius:99px;background:var(--soft);overflow:hidden}.bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--teal),var(--teal2))}
     .flag-item{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line)}.flag-item:first-child{border-top:0;padding-top:0}.flag-body{flex:1;min-width:0}.flag-name{font-weight:800;font-size:14px;margin:0 0 3px}.flag-meta{font-size:12px;color:var(--muted);line-height:1.6;word-break:break-word}.flag-meta b{color:var(--ink);font-weight:600}.flag-badge{flex:none;font-size:11px;font-weight:800;color:var(--bad);background:#fde8e8;padding:4px 9px;border-radius:99px;align-self:flex-start}.flag-photo-link{color:var(--teal);font-weight:700;font-size:12px}
   </style>
+<style>
+.manual .mic-btn{width:52px;flex:none}.manual-results{display:grid;gap:8px;margin-top:10px}.manual-results[hidden]{display:none}.manual-count,.manual-empty{font-size:13px;color:var(--muted)}.manual-hit{display:grid;gap:3px;text-align:left;border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 12px;font-size:13px;color:var(--ink);cursor:pointer}.manual-hit b{font-size:15px}.manual-hit span{color:var(--muted)}.manual-hit:active{background:var(--soft)}
+</style>
 </head>
 <body>
 <main class="app">
@@ -100,7 +103,8 @@
         <div id="cameraStatus" class="camera-status">正在開啟即時相機…</div>
         <button id="liveScan" class="secondary live-scan" type="button" hidden>▣　啟用框內即時掃描</button>
         <div id="photoScan" class="primary photo-scan capture-button"><span>📷　開啟相機拍攝並辨識</span><input id="cameraCapture" type="file" accept="image/*" capture="environment" aria-label="開啟相機拍攝並辨識"></div>
-        <div class="manual"><input id="manualAssetNo" class="control" placeholder="亦可手動輸入 AssetNo"><button id="manualCheck" class="secondary" type="button">比對</button></div>
+        <div class="manual"><input id="manualAssetNo" class="control" placeholder="輸入編號末 3 碼以上（如 0170）或完整 AssetNo" inputmode="text" autocomplete="off"><button id="manualMic" class="secondary mic-btn" type="button" hidden aria-label="語音輸入">🎤</button><button id="manualCheck" class="secondary" type="button">查詢</button></div>
+        <div id="manualResults" class="manual-results" hidden></div>
         <div class="action-stack"><button id="closeScanner" class="secondary" type="button">返回檢查清單</button></div>
       </div>
       <div id="scanResult" class="result">
@@ -202,7 +206,14 @@
     document.querySelectorAll('[data-scan]').forEach(btn=>btn.addEventListener('click',openScanner));
     $('closeScanner').addEventListener('click',closeScanner);
     $('closeScannerTop').addEventListener('click',closeScanner);
-    $('manualCheck').addEventListener('click',()=>handleCode($('manualAssetNo').value));
+    $('manualCheck').addEventListener('click',()=>manualSearch_(false));
+    $('manualResults').addEventListener('click',e=>{
+      const widen=e.target.closest('[data-widen]');
+      if(widen){manualSearch_(true);return}
+      const pick=e.target.closest('[data-pick-asset]');
+      if(pick){$('manualResults').hidden=true;handleCode(pick.dataset.pickAsset)}
+    });
+    initManualMic_();
     $('liveScan').addEventListener('click',()=>{state.liveCameraUnavailable=false;startScanner()});
     $('cameraCapture').addEventListener('change',scanCapturedPhoto);
     $('rescan').addEventListener('click',restartScanner);
@@ -427,8 +438,54 @@
       else startScanner();
     },2000);
   }
-  function resetScannerPanels(){$('scanStartPanel').style.display='block';$('scanResult').classList.remove('show','notfound');$('manualAssetNo').value='';$('readerPlaceholder').style.display='flex';state.current=null}
+  function resetScannerPanels(){$('scanStartPanel').style.display='block';$('scanResult').classList.remove('show','notfound');$('manualAssetNo').value='';$('manualResults').hidden=true;$('readerPlaceholder').style.display='flex';state.current=null}
   async function restartScanner(){resetScannerPanels();await startScanner()}
+  // 手動輸入：以編號末碼（或完整編號）查詢，列出候選後再選取，避免末碼相同時誤標
+  function manualSearch_(widen){
+    const box=$('manualResults');
+    const code=normalizeAssetNo(extractCode(digitsFromSpeech_($('manualAssetNo').value)));
+    if(!code){box.hidden=true;return toast('請輸入編號')}
+    const exact=state.records.find(r=>normalizeAssetNo(r.assetNo)===code);
+    if(exact){box.hidden=true;return handleCode(exact.assetNo)}
+    if(code.length<3){box.hidden=true;return toast('請至少輸入 3 碼')}
+    const pool=widen?state.records:unitFilteredRecords_();
+    const hits=pool.filter(r=>normalizeAssetNo(r.assetNo).endsWith(code));
+    if(hits.length===1&&!state.batchMode){box.hidden=true;return handleCode(hits[0].assetNo)}
+    if(!hits.length){
+      const canWiden=!widen&&state.records.length>pool.length;
+      box.innerHTML='<div class="manual-empty">查無符合「'+esc(code)+'」的財產'+(widen?'（已搜尋整份清單）':'')+'</div>'+(canWiden?'<button type="button" class="secondary" data-widen="1">擴大搜尋整份清單</button>':'');
+      box.hidden=false;return;
+    }
+    box.innerHTML='<div class="manual-count">符合 '+hits.length+' 筆，請點選正確的財產：</div>'+hits.slice(0,20).map(r=>'<button type="button" class="manual-hit" data-pick-asset="'+esc(r.assetNo)+'"><b>'+esc(r.assetName)+'</b><span>'+esc(r.assetNo)+'</span><span>'+esc(r.custodyUnit||'')+'｜'+esc(r.status||'待檢查')+'</span></button>').join('')+(hits.length>20?'<div class="manual-empty">僅顯示前 20 筆，請多輸入幾碼縮小範圍</div>':'');
+    box.hidden=false;
+  }
+  // 語音辨識結果轉成編號：全形轉半形，中文數字轉阿拉伯數字，去掉空白與標點
+  function digitsFromSpeech_(text){
+    const map={'零':'0','〇':'0','洞':'0','一':'1','壹':'1','幺':'1','二':'2','貳':'2','兩':'2','三':'3','參':'3','四':'4','肆':'4','五':'5','伍':'5','六':'6','陸':'6','七':'7','柒':'7','拐':'7','八':'8','捌':'8','九':'9','玖':'9','勾':'9'};
+    return String(text||'').normalize('NFKC').replace(/[零〇洞一壹幺二貳兩三參四肆五伍六陸七柒拐八捌九玖勾]/g,ch=>map[ch]).replace(/[\s,，。.、]/g,'');
+  }
+  function initManualMic_(){
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    const btn=$('manualMic');
+    if(!SR||!btn)return;
+    btn.hidden=false;
+    let rec=null,listening=false;
+    btn.addEventListener('click',()=>{
+      if(listening&&rec){rec.stop();return}
+      try{
+        rec=new SR();rec.lang='zh-TW';rec.interimResults=false;rec.maxAlternatives=1;
+        rec.onstart=()=>{listening=true;btn.textContent='⏹';toast('請說出編號末幾碼…')};
+        rec.onresult=e=>{
+          const text=digitsFromSpeech_(e.results[0][0].transcript);
+          $('manualAssetNo').value=text;
+          toast('辨識結果：'+text);
+        };
+        rec.onerror=e=>{toast(e.error==='not-allowed'||e.error==='service-not-allowed'?'未允許麥克風權限':'語音辨識失敗，請改用手動輸入')};
+        rec.onend=()=>{listening=false;btn.textContent='🎤'};
+        rec.start();
+      }catch(err){toast('此瀏覽器無法使用語音輸入')}
+    });
+  }
   function findRecord(assetNo){return state.records.find(r=>r.assetNo===assetNo)}
   function extractCode(raw){const value=String(raw||'').trim();try{const parsed=JSON.parse(value);return parsed.AssetNo||parsed.assetNo||parsed.asset_no||value}catch(e){}const match=value.match(/(?:AssetNo|asset_no)\s*[:=]\s*([^,;\s]+)/i);return match?match[1]:value}
   function normalizeAssetNo(v){return String(v||'').trim().toUpperCase().replace(/[\s\-_.／/]/g,'')}
