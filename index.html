@@ -32,6 +32,7 @@
   </style>
 <style>
 .manual .mic-btn{width:52px;flex:none}.manual-results{display:grid;gap:8px;margin-top:10px}.manual-results[hidden]{display:none}.manual-count,.manual-empty{font-size:13px;color:var(--muted)}.manual-hit{display:grid;gap:3px;text-align:left;border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 12px;font-size:13px;color:var(--ink);cursor:pointer}.manual-hit b{font-size:15px}.manual-hit span{color:var(--muted)}.manual-hit:active{background:var(--soft)}
+.phrase-bar{margin:0 0 8px}.phrase-chips{display:flex;flex-wrap:wrap;gap:6px}.phrase-chip{background:var(--soft);border:1px solid var(--line);border-radius:99px;padding:6px 12px;color:var(--teal);font-size:13px;font-weight:700;cursor:pointer;line-height:1.3}.phrase-chip:active{background:var(--teal);color:#fff}.phrase-chip.editing{border-style:dashed}.phrase-chip .x{color:var(--bad)}.phrase-hint{font-size:12px;color:var(--muted)}.phrase-tools{display:flex;gap:14px;margin-top:6px}.phrase-tool{background:none;border:0;padding:2px 0;color:var(--teal);font-size:12.5px;font-weight:700;cursor:pointer}
 </style>
 </head>
 <body>
@@ -109,7 +110,8 @@
       </div>
       <div id="scanResult" class="result">
         <h2 id="resultTitle"></h2><div id="resultName" class="result-name"></div><div id="resultAssetNo"></div>
-        <textarea id="resultComment" class="comment" maxlength="200" placeholder="輸入意見（選填）"></textarea>
+        <div id="resultPhraseBar" class="phrase-bar"></div>
+        <textarea id="resultComment"class="comment" maxlength="200" placeholder="輸入意見（選填）"></textarea>
         <div class="action-stack">
           <button id="confirmOk" class="primary" type="button">確認正常</button>
           <button id="confirmAbnormal" class="danger" type="button">標記異常</button>
@@ -214,6 +216,8 @@
       if(pick){$('manualResults').hidden=true;handleCode(pick.dataset.pickAsset)}
     });
     initManualMic_();
+    $('resultPhraseBar').addEventListener('click',e=>{handlePhraseClick_(e,$('resultComment'))});
+    renderPhraseBars_();
     $('liveScan').addEventListener('click',()=>{state.liveCameraUnavailable=false;startScanner()});
     $('cameraCapture').addEventListener('change',scanCapturedPhoto);
     $('rescan').addEventListener('click',restartScanner);
@@ -226,6 +230,8 @@
     $('assetList').addEventListener('input',e=>{if(!e.target.matches('[data-comment]'))return;const rec=findRecord(e.target.dataset.comment);if(rec)rec.comment=e.target.value});
     $('assetList').addEventListener('change',e=>{const photoInput=e.target.closest('[data-photo-input]');if(!photoInput)return;const file=photoInput.files&&photoInput.files[0];if(file)onCardPhotoChange_(photoInput.dataset.photoInput,file)});
     $('assetList').addEventListener('click',e=>{
+      const phCard=e.target.closest('.asset-card');
+      if(handlePhraseClick_(e,phCard&&phCard.querySelector('[data-comment]')))return;
       const copyBtn=e.target.closest('[data-copy]');
       if(copyBtn){copyAssetNo_(copyBtn.dataset.copy);return}
       const flagBtn=e.target.closest('[data-flag-abnormal]');
@@ -320,7 +326,7 @@
       return `<button type="button" class="unit-jump-btn" data-jump-levels="${json}">${esc(lv)}</button>`;
     }).join('')+'</div>';
   }
-  function assetCard(r){const cls=r.status==='正常'?'ok':r.status==='異常'?'bad':'wait';const photoBlock=r.pendingPhoto?`<img class="photo-thumb" src="${esc(r.pendingPhoto.base64)}" alt="待上傳照片"><div class="photo-pending">📌 已選擇照片，按「🚩 標記異常」時會一併上傳</div>`:(r.photoUrl?`<a href="${esc(r.photoUrl)}" target="_blank" rel="noopener"><img class="photo-thumb" src="${esc(r.photoUrl)}" alt="存證照片"></a>`:'');return `<article class="card asset-card"><span class="badge ${cls}">${esc(r.status)}</span><h3>${esc(r.assetName)}</h3><dl class="details"><dt>AssetNo</dt><dd>${esc(r.assetNo)} <button class="copy-btn" type="button" data-copy="${esc(r.assetNo)}">複製</button></dd><dt>保管單位</dt><dd>${unitJumpChips_(r)}</dd><dt>存置地點</dt><dd>${esc(r.location||'—')}</dd><dt>儀器類</dt><dd>${r.instrument?'是':'否'}</dd></dl><div class="comment-row"><textarea class="comment" data-comment="${esc(r.assetNo)}" maxlength="200" placeholder="輸入意見（選填）">${esc(r.comment||'')}</textarea><button class="secondary card-save-comment" type="button" data-save-comment="${esc(r.assetNo)}">存檔</button></div><div class="card-photo">${photoBlock}<div class="secondary capture-button card-photo-btn"><span>📷　${r.pendingPhoto||r.photoUrl?'更換照片':'附加照片'}</span><input type="file" accept="image/*" capture="environment" data-photo-input="${esc(r.assetNo)}" aria-label="附加照片"></div></div><div class="manual card-manual"><input class="control" data-manual-input value="${esc(r.assetNo)}" placeholder="輸入 AssetNo 比對"><button class="secondary" type="button" data-manual-check="${esc(r.assetNo)}">比對</button></div><button class="danger card-flag" type="button" data-flag-abnormal="${esc(r.assetNo)}">🚩 標記異常</button></article>`}
+  function assetCard(r){const cls=r.status==='正常'?'ok':r.status==='異常'?'bad':'wait';const photoBlock=r.pendingPhoto?`<img class="photo-thumb" src="${esc(r.pendingPhoto.base64)}" alt="待上傳照片"><div class="photo-pending">📌 已選擇照片，按「🚩 標記異常」時會一併上傳</div>`:(r.photoUrl?`<a href="${esc(r.photoUrl)}" target="_blank" rel="noopener"><img class="photo-thumb" src="${esc(r.photoUrl)}" alt="存證照片"></a>`:'');return `<article class="card asset-card"><span class="badge ${cls}">${esc(r.status)}</span><h3>${esc(r.assetName)}</h3><dl class="details"><dt>AssetNo</dt><dd>${esc(r.assetNo)} <button class="copy-btn" type="button" data-copy="${esc(r.assetNo)}">複製</button></dd><dt>保管單位</dt><dd>${unitJumpChips_(r)}</dd><dt>存置地點</dt><dd>${esc(r.location||'—')}</dd><dt>儀器類</dt><dd>${r.instrument?'是':'否'}</dd></dl><div class="phrase-bar">${phraseBarInner_()}</div><div class="comment-row"><textarea class="comment" data-comment="${esc(r.assetNo)}" maxlength="200" placeholder="輸入意見（選填）">${esc(r.comment||'')}</textarea><button class="secondary card-save-comment" type="button" data-save-comment="${esc(r.assetNo)}">存檔</button></div><div class="card-photo">${photoBlock}<div class="secondary capture-button card-photo-btn"><span>📷　${r.pendingPhoto||r.photoUrl?'更換照片':'附加照片'}</span><input type="file" accept="image/*" capture="environment" data-photo-input="${esc(r.assetNo)}" aria-label="附加照片"></div></div><div class="manual card-manual"><input class="control" data-manual-input value="${esc(r.assetNo)}" placeholder="輸入 AssetNo 比對"><button class="secondary" type="button" data-manual-check="${esc(r.assetNo)}">比對</button></div><button class="danger card-flag" type="button" data-flag-abnormal="${esc(r.assetNo)}">🚩 標記異常</button></article>`}
   function openScanner(){if(!state.records.length)return toast('目前沒有可檢查的財產資料');$('scanOverlay').classList.add('open');resetScannerPanels();$('liveScan').hidden=true;$('readerPlaceholder').style.display='flex';state.liveCameraUnavailable=false;state.batchBusy=false;updateBatchIndicator_();updateNextTargetHint_();setCameraStatus('正在開啟即時相機…');startScanner()}
   function updateBatchIndicator_(){$('scannerHeadLabel').textContent=state.batchMode?'掃描財產標籤（批次模式）':'掃描財產標籤'}
   async function copyAssetNo_(text){try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text)}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');document.body.removeChild(ta)}toast('已複製 '+text)}catch(e){toast('複製失敗，請手動選取')}}
@@ -440,6 +446,41 @@
   }
   function resetScannerPanels(){$('scanStartPanel').style.display='block';$('scanResult').classList.remove('show','notfound');$('manualAssetNo').value='';$('manualResults').hidden=true;$('readerPlaceholder').style.display='flex';state.current=null}
   async function restartScanner(){resetScannerPanels();await startScanner()}
+  // 備註常用片語：存在這支手機（localStorage），預設為空，由使用者自行新增
+  const PHRASE_KEY='propertyCheckPhrases';
+  let phrases_=(function(){try{const a=JSON.parse(localStorage.getItem(PHRASE_KEY)||'[]');return Array.isArray(a)?a.filter(x=>typeof x==='string'&&x).slice(0,30):[]}catch(e){return[]}})();
+  let phraseEdit_=false;
+  function savePhrases_(){try{localStorage.setItem(PHRASE_KEY,JSON.stringify(phrases_))}catch(e){}}
+  function phraseBarInner_(){
+    const chips=phrases_.map((p,i)=>`<button type="button" class="phrase-chip${phraseEdit_?' editing':''}" data-phrase-i="${i}">${esc(p)}${phraseEdit_?' <span class="x">✕</span>':''}</button>`).join('');
+    const hint=phrases_.length?'':'<span class="phrase-hint">尚無常用片語：在備註欄輸入文字後，按「＋存成片語」</span>';
+    return `<div class="phrase-chips">${chips}${hint}</div><div class="phrase-tools"><button type="button" class="phrase-tool" data-phrase-save>＋存成片語</button>${phrases_.length?`<button type="button" class="phrase-tool" data-phrase-edit>${phraseEdit_?'完成':'編輯'}</button>`:''}</div>`;
+  }
+  function renderPhraseBars_(){document.querySelectorAll('.phrase-bar').forEach(el=>{el.innerHTML=phraseBarInner_()})}
+  function handlePhraseClick_(e,ta){
+    const chip=e.target.closest('[data-phrase-i]');
+    if(chip){
+      const i=+chip.dataset.phraseI;
+      if(phraseEdit_){phrases_.splice(i,1);if(!phrases_.length)phraseEdit_=false;savePhrases_();renderPhraseBars_();return true}
+      if(ta&&phrases_[i]){
+        const cur=ta.value.trim();
+        ta.value=(cur?cur.replace(/[，,\s]+$/,'')+'，'+phrases_[i]:phrases_[i]).slice(0,200);
+        ta.dispatchEvent(new Event('input',{bubbles:true}));
+      }
+      return true;
+    }
+    if(e.target.closest('[data-phrase-edit]')){phraseEdit_=!phraseEdit_;renderPhraseBars_();return true}
+    if(e.target.closest('[data-phrase-save]')){
+      const v=ta?ta.value.trim():'';
+      if(!v){toast('請先在備註欄輸入文字');return true}
+      if(v.length>20){toast('片語請在 20 字以內');return true}
+      if(phrases_.includes(v)){toast('這個片語已經存在');return true}
+      if(phrases_.length>=30){toast('片語最多 30 個，請先刪除不用的');return true}
+      phrases_.push(v);savePhrases_();phraseEdit_=false;renderPhraseBars_();toast('已新增片語「'+v+'」');
+      return true;
+    }
+    return false;
+  }
   // 手動輸入：以編號末碼（或完整編號）查詢，列出候選後再選取，避免末碼相同時誤標
   function manualSearch_(widen){
     const box=$('manualResults');
