@@ -101,6 +101,7 @@
     <div class="scanner-actions">
       <div id="scanStartPanel">
         <label class="batch-toggle"><input type="checkbox" id="batchModeToggle"> 批次掃描模式（掃到就自動存檔並繼續下一筆）</label>
+        <label class="batch-toggle"><input type="checkbox" id="gunModeToggle"> 🔫 藍牙掃描槍模式（輸入欄自動待命，掃到後自動查詢）</label>
         <div id="cameraStatus" class="camera-status">正在開啟即時相機…</div>
         <button id="liveScan" class="secondary live-scan" type="button" hidden>▣　啟用框內即時掃描</button>
         <div id="photoScan" class="primary photo-scan capture-button"><span>📷　開啟相機拍攝並辨識</span><input id="cameraCapture" type="file" accept="image/*" capture="environment" aria-label="開啟相機拍攝並辨識"></div>
@@ -216,6 +217,15 @@
       if(pick){$('manualResults').hidden=true;handleCode(pick.dataset.pickAsset)}
     });
     initManualMic_();
+    $('gunModeToggle').checked=gunMode_;
+    $('gunModeToggle').addEventListener('change',e=>{gunMode_=e.target.checked;try{localStorage.setItem(GUN_KEY,gunMode_?'1':'0')}catch(err){}if(gunMode_)focusManual_()});
+    $('manualAssetNo').addEventListener('keydown',e=>{
+      if(e.key!=='Enter'||!gunMode_)return;
+      e.preventDefault();
+      state.batchBusy=false; // 掃描槍速度快，不套用相機的 1.2 秒冷卻
+      manualSearch_(false);
+      setTimeout(()=>{const i=$('manualAssetNo');if(gunMode_&&i.value){i.focus();i.select()}},0);
+    });
     $('resultPhraseBar').addEventListener('click',e=>{handlePhraseClick_(e,$('resultComment'))});
     renderPhraseBars_();
     $('liveScan').addEventListener('click',()=>{state.liveCameraUnavailable=false;startScanner()});
@@ -327,7 +337,7 @@
     }).join('')+'</div>';
   }
   function assetCard(r){const cls=r.status==='正常'?'ok':r.status==='異常'?'bad':'wait';const photoBlock=r.pendingPhoto?`<img class="photo-thumb" src="${esc(r.pendingPhoto.base64)}" alt="待上傳照片"><div class="photo-pending">📌 已選擇照片，按「🚩 標記異常」時會一併上傳</div>`:(r.photoUrl?`<a href="${esc(r.photoUrl)}" target="_blank" rel="noopener"><img class="photo-thumb" src="${esc(r.photoUrl)}" alt="存證照片"></a>`:'');return `<article class="card asset-card"><span class="badge ${cls}">${esc(r.status)}</span><h3>${esc(r.assetName)}</h3><dl class="details"><dt>AssetNo</dt><dd>${esc(r.assetNo)} <button class="copy-btn" type="button" data-copy="${esc(r.assetNo)}">複製</button></dd><dt>保管單位</dt><dd>${unitJumpChips_(r)}</dd><dt>存置地點</dt><dd>${esc(r.location||'—')}</dd><dt>儀器類</dt><dd>${r.instrument?'是':'否'}</dd></dl><div class="phrase-bar">${phraseBarInner_()}</div><div class="comment-row"><textarea class="comment" data-comment="${esc(r.assetNo)}" maxlength="200" placeholder="輸入意見（選填）">${esc(r.comment||'')}</textarea><button class="secondary card-save-comment" type="button" data-save-comment="${esc(r.assetNo)}">存檔</button></div><div class="card-photo">${photoBlock}<div class="secondary capture-button card-photo-btn"><span>📷　${r.pendingPhoto||r.photoUrl?'更換照片':'附加照片'}</span><input type="file" accept="image/*" capture="environment" data-photo-input="${esc(r.assetNo)}" aria-label="附加照片"></div></div><div class="manual card-manual"><input class="control" data-manual-input value="${esc(r.assetNo)}" placeholder="輸入 AssetNo 比對"><button class="secondary" type="button" data-manual-check="${esc(r.assetNo)}">比對</button></div><button class="danger card-flag" type="button" data-flag-abnormal="${esc(r.assetNo)}">🚩 標記異常</button></article>`}
-  function openScanner(){if(!state.records.length)return toast('目前沒有可檢查的財產資料');$('scanOverlay').classList.add('open');resetScannerPanels();$('liveScan').hidden=true;$('readerPlaceholder').style.display='flex';state.liveCameraUnavailable=false;state.batchBusy=false;updateBatchIndicator_();updateNextTargetHint_();setCameraStatus('正在開啟即時相機…');startScanner()}
+  function openScanner(){if(!state.records.length)return toast('目前沒有可檢查的財產資料');$('scanOverlay').classList.add('open');resetScannerPanels();$('liveScan').hidden=true;$('readerPlaceholder').style.display='flex';state.liveCameraUnavailable=false;state.batchBusy=false;updateBatchIndicator_();updateNextTargetHint_();setCameraStatus('正在開啟即時相機…');startScanner();focusManual_()}
   function updateBatchIndicator_(){$('scannerHeadLabel').textContent=state.batchMode?'掃描財產標籤（批次模式）':'掃描財產標籤'}
   async function copyAssetNo_(text){try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text)}else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.focus();ta.select();document.execCommand('copy');document.body.removeChild(ta)}toast('已複製 '+text)}catch(e){toast('複製失敗，請手動選取')}}
   async function manualCheckFromCard_(value){
@@ -444,8 +454,18 @@
       else startScanner();
     },2000);
   }
-  function resetScannerPanels(){$('scanStartPanel').style.display='block';$('scanResult').classList.remove('show','notfound');$('manualAssetNo').value='';$('manualResults').hidden=true;$('readerPlaceholder').style.display='flex';state.current=null}
+  function resetScannerPanels(){$('scanStartPanel').style.display='block';$('scanResult').classList.remove('show','notfound');$('manualAssetNo').value='';$('manualResults').hidden=true;$('readerPlaceholder').style.display='flex';state.current=null;focusManual_()}
   async function restartScanner(){resetScannerPanels();await startScanner()}
+  // 藍牙掃描槍模式：掃描槍在 iPhone 上等同藍牙鍵盤，把編號打進輸入欄並送出 Enter
+  const GUN_KEY='propertyCheckGunMode';
+  let gunMode_=(function(){try{return localStorage.getItem(GUN_KEY)==='1'}catch(e){return false}})();
+  function focusManual_(){
+    if(!gunMode_)return;
+    setTimeout(()=>{
+      const input=$('manualAssetNo');
+      if(input&&$('scanOverlay').classList.contains('open')&&$('scanStartPanel').style.display!=='none')input.focus({preventScroll:true});
+    },80);
+  }
   // 備註常用片語：存在這支手機（localStorage），預設為空，由使用者自行新增
   const PHRASE_KEY='propertyCheckPhrases';
   let phrases_=(function(){try{const a=JSON.parse(localStorage.getItem(PHRASE_KEY)||'[]');return Array.isArray(a)?a.filter(x=>typeof x==='string'&&x).slice(0,30):[]}catch(e){return[]}})();
@@ -487,7 +507,12 @@
     const code=normalizeAssetNo(extractCode(digitsFromSpeech_($('manualAssetNo').value)));
     if(!code){box.hidden=true;return toast('請輸入編號')}
     const exact=state.records.find(r=>normalizeAssetNo(r.assetNo)===code);
-    if(exact){box.hidden=true;return handleCode(exact.assetNo)}
+    if(exact){
+      box.hidden=true;
+      const done=handleCode(exact.assetNo);
+      if(gunMode_){$('manualAssetNo').value='';focusManual_()}
+      return done;
+    }
     if(code.length<3){box.hidden=true;return toast('請至少輸入 3 碼')}
     const pool=widen?state.records:unitFilteredRecords_();
     const hits=pool.filter(r=>normalizeAssetNo(r.assetNo).endsWith(code));
