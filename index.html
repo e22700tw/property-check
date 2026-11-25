@@ -377,6 +377,7 @@
       if(includePhoto)rec.pendingPhoto=null;
       renderAll();
       toast(status==='異常'?'🚩 已標記異常：'+rec.assetName:'✓ 已記錄：'+rec.assetName);
+      if(result.photoError){setTimeout(()=>toast('⚠ 結果已儲存，但照片上傳失敗：'+result.photoError),1800)}
       if(rec.instrument)showInstrumentReminderSimple_();
     }catch(e){toast(e.message)}
     finally{setLoading(false)}
